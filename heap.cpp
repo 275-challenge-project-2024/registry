@@ -1,131 +1,133 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <sys/types.h>
+#include <iostream>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
+#include <cstring>
+#include <cerrno>
+#include <algorithm>
+#include <vector>
 
-#define MAX_STRING_LENGTH 256
-#define INITIAL_CAPACITY 100 // Initial capacity of the heap
-key_t worker_heap = 'worker_heap';
+const char *sharedMemoryName = "/my_shared_memory";
+const size_t sharedMemorySize = 1024 * 1024; // Increase the size for complex structures
 
-typedef struct
-{
-  char id[MAX_STRING_LENGTH];
-  int value;
-} HeapItem;
+struct HeapElement {
+    char workerId[32];
+    char timestamp[32];
+    int32_t curr_capacity;
+    int32_t total_capacity;
 
-typedef struct
-{
-  int size;
-  int capacity;
-  HeapItem data[];
-} Heap;
+    int32_t capacity_difference() const {
+        return total_capacity - curr_capacity;
+    }
+};
 
-Heap *initialize_heap(int capacity, void *shm_addr)
-{
-  Heap *heap = (Heap *)shm_addr;
-  heap->size = 0;
-  heap->capacity = capacity;
-  return heap;
+struct HeapData {
+    HeapElement data[256];
+    size_t size;
+};
+
+// Function to heapify the element at index i in a max heap
+void heapify(HeapData* heap, size_t i) {
+    size_t largest = i;
+    size_t left = 2 * i + 1;
+    size_t right = 2 * i + 2;
+
+    if (left < heap->size && heap->data[left].capacity_difference() > heap->data[largest].capacity_difference()) {
+        largest = left;
+    }
+
+    if (right < heap->size && heap->data[right].capacity_difference() > heap->data[largest].capacity_difference()) {
+        largest = right;
+    }
+
+    if (largest != i) {
+        std::swap(heap->data[i], heap->data[largest]);
+        heapify(heap, largest);
+    }
 }
 
-void heap_push(Heap *heap, const char *id, int value)
-{
-  if (heap->size == heap->capacity)
-  {
-    //edge case where we have more than 100 workers
-    fprintf(stderr, "Heap is full\n");
-    return;
-  }
+void push(HeapData* heap, const HeapElement& value) {
+    if (heap->size >= 256) {
+        std::cerr << "Heap overflow\n";
+        return;
+    }
 
-  int i = heap->size;
-  strncpy(heap->data[i].id, id, MAX_STRING_LENGTH - 1);
-  heap->data[i].id[MAX_STRING_LENGTH - 1] = '\0'; // Ensure null termination
-  heap->data[i].value = value;
-  heap->size++;
+    heap->data[heap->size] = value;
+    size_t i = heap->size;
+    heap->size++;
 
-  //heapify after pushing element to bottom
-  while (i != 0 && heap->data[(i - 1) / 2].value < heap->data[i].value)
-  {
-    HeapItem temp = heap->data[i];
-    heap->data[i] = heap->data[(i - 1) / 2];
-    heap->data[(i - 1) / 2] = temp;
-    i = (i - 1) / 2;
-  }
+    while (i != 0 && heap->data[(i - 1) / 2].capacity_difference() < heap->data[i].capacity_difference()) {
+        std::swap(heap->data[i], heap->data[(i - 1) / 2]);
+        i = (i - 1) / 2;
+    }
 }
 
-HeapItem heap_pop(Heap *heap)
-{
-  if (heap->size == 0)
-  {
-    fprintf(stderr, "Heap is empty\n");
-    return (HeapItem){.id = "", .value = 0};
-  }
+HeapElement pop(HeapData* heap) {
+    if (heap->size <= 0) {
+        std::cerr << "Heap underflow\n";
+        return {};
+    }
 
-  HeapItem root = heap->data[0];
-  heap->data[0] = heap->data[heap->size - 1];
-  heap->size--;
+    HeapElement root = heap->data[0];
+    heap->data[0] = heap->data[heap->size - 1];
+    heap->size--;
+    heapify(heap, 0);
 
-  //heapify after popping
-  int i = 0;
-  while (2 * i + 1 < heap->size)
-  {
-    int left = 2 * i + 1;
-    int right = 2 * i + 2;
-    int largest = i;
-
-    if (left < heap->size && heap->data[left].value > heap->data[largest].value)
-      largest = left;
-    if (right < heap->size && heap->data[right].value > heap->data[largest].value)
-      largest = right;
-
-    if (largest == i)
-      break;
-
-    HeapItem temp = heap->data[i];
-    heap->data[i] = heap->data[largest];
-    heap->data[largest] = temp;
-    i = largest;
-  }
-
-  return root;
+    return root;
 }
 
-// example code for initializing and using the heap, instead of this plug resgistry maintenance
-int main()
-{
-  int shm_id = shmget(worker_heap, sizeof(Heap) + INITIAL_CAPACITY * sizeof(HeapItem), IPC_CREAT | 0666);
-  if (shm_id < 0)
-  {
-    perror("shmget failed");
-    exit(1);
-  }
+int main() {
+    // Clean up any previous shared memory object
+    shm_unlink(sharedMemoryName);
 
-  void *shm_addr = shmat(shm_id, NULL, 0);
-  if (shm_addr == (void *)-1)
-  {
-    perror("shmat failed");
-    exit(1);
-  }
+    // Create shared memory object
+    int shm_fd = shm_open(sharedMemoryName, O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) {
+        std::cerr << "Failed to create shared memory object: " << strerror(errno) << "\n";
+        return 1;
+    }
 
-  Heap *heap = initialize_heap(INITIAL_CAPACITY, shm_addr);
-  //push into heap (worker_address, current_capacity)
-  heap_push(heap, "worker_address", 5);
-  
+    // Set the size of the shared memory object
+    if (ftruncate(shm_fd, sharedMemorySize) == -1) {
+        std::cerr << "Failed to set size of shared memory object: " << strerror(errno) << "\n";
+        return 1;
+    }
 
-  //pop worker with max current_capacity
-  HeapItem maxItem = heap_pop(heap);
-  printf("Popped: %s, %d\n", maxItem.id, maxItem.value);
+    // Map the shared memory object into the address space
+    void *ptr = mmap(0, sharedMemorySize, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (ptr == MAP_FAILED) {
+        std::cerr << "Failed to map shared memory object: " << strerror(errno) << "\n";
+        return 1;
+    }
 
-  if (shmdt(shm_addr) < 0)
-  {
-    perror("shmdt failed");
-    exit(1);
-  }
+    // Initialize the heap data
+    HeapData *heapData = static_cast<HeapData*>(ptr);
+    heapData->size = 0;
 
-  shmctl(shm_id, IPC_RMID, NULL);
+    // Example elements to push to the heap
+    HeapElement element1 = {"worker1", "2023-05-15T08:00:00Z", 10, 50};
+    HeapElement element2 = {"worker2", "2023-05-15T08:01:00Z", 20, 60};
+    HeapElement element3 = {"worker3", "2023-05-15T08:02:00Z", 30, 70};
 
-  return 0;
+    // Push elements to the heap
+    push(heapData, element1);
+    push(heapData, element2);
+    push(heapData, element3);
+
+    std::cout << "Data pushed to heap\n";
+
+    // Unmap the shared memory object
+    if (munmap(ptr, sharedMemorySize) == -1) {
+        std::cerr << "Failed to unmap shared memory object: " << strerror(errno) << "\n";
+        return 1;
+    }
+
+    // Close the shared memory object
+    if (close(shm_fd) == -1) {
+        std::cerr << "Failed to close shared memory object: " << strerror(errno) << "\n";
+        return 1;
+    }
+
+    return 0;
 }

@@ -1,69 +1,65 @@
-#include <iostream>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include <cstring>
-#include <cerrno>
 
-const char *sharedMemoryName = "/my_shared_memory";
-const size_t sharedMemorySize = 1024 * 1024; // Must match heap.cpp
+#define MAX_STRING_LENGTH 256
+#define INITIAL_CAPACITY 100
+key_t worker_heap_key = 'shm_unique_key';
 
-struct HeapElement {
-    char workerId[32];
-    char timestamp[32];
-    int32_t curr_capacity;
-    int32_t total_capacity;
+typedef struct
+{
+    char id[MAX_STRING_LENGTH];
+    int value;
+} HeapItem;
 
-    int32_t capacity_difference() const {
-        return total_capacity - curr_capacity;
-    }
-};
+typedef struct
+{
+    int size;
+    int capacity;
+    HeapItem data[];
+} Heap;
 
-struct HeapData {
-    HeapElement data[256];
-    size_t size;
-};
-
-int main() {
-    // Open the shared memory object
-    int shm_fd = shm_open(sharedMemoryName, O_RDONLY, 0666);
-    if (shm_fd == -1) {
-        std::cerr << "Failed to open shared memory object: " << strerror(errno) << "\n";
-        return 1;
+Heap *attach_heap()
+{
+    int shm_id = shmget(worker_heap_key, sizeof(Heap) + INITIAL_CAPACITY * sizeof(HeapItem), 0666);
+    if (shm_id < 0)
+    {
+        perror("shmget failed");
+        exit(1);
     }
 
-    // Map the shared memory object into the address space
-    void *ptr = mmap(0, sharedMemorySize, PROT_READ, MAP_SHARED, shm_fd, 0);
-    if (ptr == MAP_FAILED) {
-        std::cerr << "Failed to map shared memory object: " << strerror(errno) << "\n";
-        return 1;
+    void *shm_addr = shmat(shm_id, NULL, 0);
+    if (shm_addr == (void *)-1)
+    {
+        perror("shmat failed");
+        exit(1);
     }
+    return (Heap *)shm_addr;
+}
 
-    // Read the heap data
-    HeapData *heapData = static_cast<HeapData*>(ptr);
-
-    // Print the heap data
-    std::cout << "Heap data size: " << heapData->size << "\n";
-    for (size_t i = 0; i < heapData->size; ++i) {
-        std::cout << "Data[" << i << "]: workerId=" << heapData->data[i].workerId
-                  << ", timestamp=" << heapData->data[i].timestamp
-                  << ", curr_capacity=" << heapData->data[i].curr_capacity
-                  << ", total_capacity=" << heapData->data[i].total_capacity
-                  << ", capacity_difference=" << heapData->data[i].capacity_difference()
-                  << "\n";
+void print_heap(Heap *heap)
+{
+    printf("Heap size: %d\n", heap->size);
+    printf("Heap capacity: %d\n", heap->capacity);
+    printf("Heap items:\n");
+    for (int i = 0; i < heap->size; ++i)
+    {
+        printf("ID: %s, Value: %d\n", heap->data[i].id, heap->data[i].value);
     }
+}
 
-    // Unmap the shared memory object
-    if (munmap(ptr, sharedMemorySize) == -1) {
-        std::cerr << "Failed to unmap shared memory object: " << strerror(errno) << "\n";
-        return 1;
-    }
-
-    // Close the shared memory object
-    if (close(shm_fd) == -1) {
-        std::cerr << "Failed to close shared memory object: " << strerror(errno) << "\n";
-        return 1;
+int main()
+{
+    Heap *heap = attach_heap();
+    print_heap(heap);
+    if (shmdt((void *)heap) < 0)
+    {
+        perror("shmdt failed");
+        exit(1);
     }
 
     return 0;

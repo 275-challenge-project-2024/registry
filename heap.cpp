@@ -124,7 +124,18 @@ bool remove_node_by_id(HeapData* heap, const char* workerId) {
 
 // Example code for initializing and using the heap
 int main() {
-    int shm_id = shmget(SHM_KEY, sizeof(HeapData), IPC_CREAT | 0666);
+  int shm_id = shmget(SHM_KEY, sizeof(HeapData), IPC_CREAT | 0666);
+    if (shm_id >= 0) {
+
+        // If shared memory segment exists, delete it
+        if (shmctl(shm_id, IPC_RMID, NULL) == -1)
+        {
+            perror("shmctl(IPC_RMID) failed");
+            exit(1);
+        }
+    }
+
+    shm_id = shmget(SHM_KEY, sizeof(HeapData), IPC_CREAT | 0666);
     if (shm_id < 0) {
         perror("shmget failed");
         exit(1);
@@ -138,23 +149,21 @@ int main() {
 
     HeapData* heap = initialize_heap(shm_addr);
     // Push into heap (workerId, timestamp, curr_capacity, total_capacity)
-    heap_push(heap, "worker_1", "2024-05-15T12:00:00Z", 5, 10);
-    heap_push(heap, "worker_2", "2024-05-15T12:01:00Z", 3, 15);
-    heap_push(heap, "worker_3", "2024-05-15T12:02:00Z", 10, 20);
+    heap_push(heap, "worker_1", "2024-05-16T01:30:00Z", 5, 10);
+    heap_push(heap, "worker_2", "2024-05-16T01:35:00Z", 3, 15);
+    heap_push(heap, "worker_3", "2024-05-16T01:28:00Z", 10, 20);
 
     // Remove worker by ID
-    remove_node_by_id(heap, "worker_2");
+    // remove_node_by_id(heap, "worker_2");
 
     // Pop worker with max capacity_difference
-    HeapElement maxItem = heap_pop(heap);
-    printf("Popped: %s, Timestamp: %s, Current Capacity: %d, Total Capacity: %d\n", maxItem.workerId, maxItem.timestamp, maxItem.curr_capacity, maxItem.total_capacity);
+    // HeapElement maxItem = heap_pop(heap);
+    // printf("Popped: %s, Timestamp: %s, Current Capacity: %d, Total Capacity: %d\n", maxItem.workerId, maxItem.timestamp, maxItem.curr_capacity, maxItem.total_capacity);
 
     if (shmdt(shm_addr) < 0) {
         perror("shmdt failed");
         exit(1);
     }
-
-    // shmctl(shm_id, IPC_RMID, NULL);
 
     return 0;
 }

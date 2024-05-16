@@ -6,25 +6,12 @@
 #include <sys/shm.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include "worker_heap.h"
+#include "task_heap.h"
 
-#define MAX_WORKERS 256
 #define SHM_KEY 12345 // Use a unique integer key for shared memory
 
-struct HeapElement {
-    char workerId[32];
-    char timestamp[32];
-    int32_t curr_capacity;
-    int32_t total_capacity;
-
-    int32_t capacity_difference() const {
-        return total_capacity - curr_capacity;
-    }
-};
-
-struct HeapData {
-    HeapElement data[MAX_WORKERS];
-    size_t size;
-};
+// Function definitions for worker heap
 
 HeapData* initialize_heap(void* shm_addr) {
     HeapData* heap = (HeapData*)shm_addr;
@@ -69,22 +56,19 @@ void heap_push(HeapData* heap, const char* workerId, const char* timestamp, int3
     }
 
     strncpy(heap->data[heap->size].workerId, workerId, sizeof(heap->data[heap->size].workerId) - 1);
-    heap->data[heap->size].workerId[sizeof(heap->data[heap->size].workerId) - 1] = '\0'; // Ensure null termination
-
+    heap->data[heap->size].workerId[sizeof(heap->data[heap->size].workerId) - 1] = '\0';
     strncpy(heap->data[heap->size].timestamp, timestamp, sizeof(heap->data[heap->size].timestamp) - 1);
-    heap->data[heap->size].timestamp[sizeof(heap->data[heap->size].timestamp) - 1] = '\0'; // Ensure null termination
-
+    heap->data[heap->size].timestamp[sizeof(heap->data[heap->size].timestamp) - 1] = '\0';
     heap->data[heap->size].curr_capacity = curr_capacity;
     heap->data[heap->size].total_capacity = total_capacity;
-
+    heapify_up(heap, heap->size);
     heap->size++;
-    heapify_up(heap, heap->size - 1);
 }
 
 HeapElement heap_pop(HeapData* heap) {
     if (heap->size == 0) {
         fprintf(stderr, "Heap is empty\n");
-        return HeapElement(); // Default initialization
+        exit(1);
     }
 
     HeapElement root = heap->data[0];
@@ -122,48 +106,4 @@ bool remove_node_by_id(HeapData* heap, const char* workerId) {
     return true;
 }
 
-// Example code for initializing and using the heap
-int main() {
-  int shm_id = shmget(SHM_KEY, sizeof(HeapData), IPC_CREAT | 0666);
-    if (shm_id >= 0) {
-
-        // If shared memory segment exists, delete it
-        if (shmctl(shm_id, IPC_RMID, NULL) == -1)
-        {
-            perror("shmctl(IPC_RMID) failed");
-            exit(1);
-        }
-    }
-
-    shm_id = shmget(SHM_KEY, sizeof(HeapData), IPC_CREAT | 0666);
-    if (shm_id < 0) {
-        perror("shmget failed");
-        exit(1);
-    }
-
-    void* shm_addr = shmat(shm_id, NULL, 0);
-    if (shm_addr == (void*)-1) {
-        perror("shmat failed");
-        exit(1);
-    }
-
-    HeapData* heap = initialize_heap(shm_addr);
-    // Push into heap (workerId, timestamp, curr_capacity, total_capacity)
-    heap_push(heap, "worker_1", "2024-05-16T01:30:00Z", 5, 10);
-    heap_push(heap, "worker_2", "2024-05-16T01:35:00Z", 3, 15);
-    heap_push(heap, "worker_3", "2024-05-16T01:28:00Z", 10, 20);
-
-    // Remove worker by ID
-    // remove_node_by_id(heap, "worker_2");
-
-    // Pop worker with max capacity_difference
-    // HeapElement maxItem = heap_pop(heap);
-    // printf("Popped: %s, Timestamp: %s, Current Capacity: %d, Total Capacity: %d\n", maxItem.workerId, maxItem.timestamp, maxItem.curr_capacity, maxItem.total_capacity);
-
-    if (shmdt(shm_addr) < 0) {
-        perror("shmdt failed");
-        exit(1);
-    }
-
-    return 0;
-}
+// Remove the main function from here

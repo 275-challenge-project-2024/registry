@@ -1,36 +1,36 @@
 #ifndef WORKER_HEAP_H
 #define WORKER_HEAP_H
 
+#include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include <pthread.h>
+#include <sys/types.h>
 
-#define MAX_WORKERS 256
+#define MAX_WORKERS 10000
 
-struct HeapElement {
+// Structure to store each worker element in the heap
+struct WorkerHeapElement {
     char workerId[32];
     char timestamp[32];
-    int32_t curr_capacity;
-    int32_t total_capacity;
-
-    int32_t capacity_difference() const {
-        return total_capacity - curr_capacity;
-    }
+    int32_t priority;
+    int32_t capacity_difference;
 };
 
-struct HeapData {
-    HeapElement data[MAX_WORKERS];
+// Structure to store the worker heap data
+struct WorkerHeapData {
+    struct WorkerHeapElement data[MAX_WORKERS];
     size_t size;
+    pthread_mutex_t mutex; // Add the mutex here
 };
 
-// Function declarations
-HeapData* initialize_heap(void* shm_addr);
-void swap(HeapElement& a, HeapElement& b);
-void heapify_up(HeapData* heap, size_t index);
-void heapify_down(HeapData* heap, size_t index);
-void heap_push(HeapData* heap, const char* workerId, const char* timestamp, int32_t curr_capacity, int32_t total_capacity);
-HeapElement heap_pop(HeapData* heap);
-ssize_t find_index_by_id(HeapData* heap, const char* workerId);
-bool remove_node_by_id(HeapData* heap, const char* workerId);
+// Function prototypes for worker heap
+struct WorkerHeapData* initialize_worker_heap(void* shm_addr);
+void worker_swap(struct WorkerHeapElement* a, struct WorkerHeapElement* b);
+void worker_heapify_up(struct WorkerHeapData* heap, size_t index);
+void worker_heapify_down(struct WorkerHeapData* heap, size_t index);
+void worker_heap_push(struct WorkerHeapData* heap, const char* workerId, const char* timestamp, int32_t priority, int32_t capacity_difference);
+struct WorkerHeapElement worker_heap_pop(struct WorkerHeapData* heap);
+ssize_t worker_find_index_by_id(struct WorkerHeapData* heap, const char* workerId);
+bool worker_remove_node_by_id(struct WorkerHeapData* heap, const char* workerId);
 
 #endif // WORKER_HEAP_H

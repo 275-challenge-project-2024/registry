@@ -1,85 +1,100 @@
+#include "worker_heap.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include "worker_heap.h"
-#include "task_heap.h"
+#include <pthread.h>
 
-#define SHM_KEY 12345 // Use a unique integer key for shared memory
+// Initialize the worker heap structure
+struct WorkerHeapData* initialize_worker_heap(void* shm_addr) {
+    struct WorkerHeapData* heap = (struct WorkerHeapData*)shm_addr;
+    pthread_mutexattr_t attr;
 
-// Function definitions for worker heap
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
 
-HeapData* initialize_heap(void* shm_addr) {
-    HeapData* heap = (HeapData*)shm_addr;
     heap->size = 0;
+    if (pthread_mutex_init(&heap->mutex, &attr) != 0) {
+        printf("Mutex initialization failed\n");
+        return NULL;
+    }
+
+    pthread_mutexattr_destroy(&attr); // Clean up attribute
+    // printf("Heap initialized with size: %zu\n", heap->size);
+
     return heap;
 }
 
-void swap(HeapElement& a, HeapElement& b) {
-    HeapElement temp = a;
-    a = b;
-    b = temp;
+// Swap two heap elements
+void worker_swap(struct WorkerHeapElement* a, struct WorkerHeapElement* b) {
+    struct WorkerHeapElement temp = *a;
+    *a = *b;
+    *b = temp;
 }
 
-void heapify_up(HeapData* heap, size_t index) {
-    while (index != 0 && heap->data[(index - 1) / 2].capacity_difference() < heap->data[index].capacity_difference()) {
-        swap(heap->data[index], heap->data[(index - 1) / 2]);
+// Reorder the heap from the index upwards
+void worker_heapify_up(struct WorkerHeapData* heap, size_t index) {
+    while (index != 0 && heap->data[(index - 1) / 2].priority < heap->data[index].priority) {
+        worker_swap(&heap->data[index], &heap->data[(index - 1) / 2]);
         index = (index - 1) / 2;
     }
 }
 
-void heapify_down(HeapData* heap, size_t index) {
+// Reorder the heap from the index downwards
+void worker_heapify_down(struct WorkerHeapData* heap, size_t index) {
     size_t largest = index;
     size_t left = 2 * index + 1;
     size_t right = 2 * index + 2;
 
-    if (left < heap->size && heap->data[left].capacity_difference() > heap->data[largest].capacity_difference()) {
+    if (left < heap->size && heap->data[left].priority > heap->data[largest].priority) {
         largest = left;
     }
-    if (right < heap->size && heap->data[right].capacity_difference() > heap->data[largest].capacity_difference()) {
+    if (right < heap->size && heap->data[right].priority > heap->data[largest].priority) {
         largest = right;
     }
     if (largest != index) {
-        swap(heap->data[index], heap->data[largest]);
-        heapify_down(heap, largest);
+        worker_swap(&heap->data[index], &heap->data[largest]);
+        worker_heapify_down(heap, largest);
     }
 }
 
-void heap_push(HeapData* heap, const char* workerId, const char* timestamp, int32_t curr_capacity, int32_t total_capacity) {
+// Add an element to the worker heap
+void worker_heap_push(struct WorkerHeapData* heap, const char* workerId, const char* timestamp, int32_t priority, int32_t capacity_difference) {
     if (heap->size == MAX_WORKERS) {
         fprintf(stderr, "Heap is full\n");
         return;
     }
 
     strncpy(heap->data[heap->size].workerId, workerId, sizeof(heap->data[heap->size].workerId) - 1);
-    heap->data[heap->size].workerId[sizeof(heap->data[heap->size].workerId) - 1] = '\0';
+    heap->data[heap->size].workerId[sizeof(heap->data[heap->size].workerId) - 1] = '\0'; // Ensure null termination
+
     strncpy(heap->data[heap->size].timestamp, timestamp, sizeof(heap->data[heap->size].timestamp) - 1);
-    heap->data[heap->size].timestamp[sizeof(heap->data[heap->size].timestamp) - 1] = '\0';
-    heap->data[heap->size].curr_capacity = curr_capacity;
-    heap->data[heap->size].total_capacity = total_capacity;
-    heapify_up(heap, heap->size);
+    heap->data[heap->size].timestamp[sizeof(heap->data[heap->size].timestamp) - 1] = '\0'; // Ensure null termination
+
+    heap->data[heap->size].priority = priority;
+    heap->data[heap->size].capacity_difference = capacity_difference;
+
     heap->size++;
+    worker_heapify_up(heap, heap->size - 1);
+    printf("Worker %s pushed to heap with priority %d\n", workerId, priority);
 }
 
-HeapElement heap_pop(HeapData* heap) {
+// Remove the highest priority element from the worker heap
+struct WorkerHeapElement worker_heap_pop(struct WorkerHeapData* heap) {
     if (heap->size == 0) {
         fprintf(stderr, "Heap is empty\n");
-        exit(1);
+        return (struct WorkerHeapElement){}; // Default initialization
     }
 
-    HeapElement root = heap->data[0];
+    struct WorkerHeapElement root = heap->data[0];
     heap->data[0] = heap->data[heap->size - 1];
     heap->size--;
-    heapify_down(heap, 0);
+    worker_heapify_down(heap, 0);
 
     return root;
 }
 
-ssize_t find_index_by_id(HeapData* heap, const char* workerId) {
+// Find the index of a worker element by worker ID
+ssize_t worker_find_index_by_id(struct WorkerHeapData* heap, const char* workerId) {
     for (size_t i = 0; i < heap->size; ++i) {
         if (strncmp(heap->data[i].workerId, workerId, sizeof(heap->data[i].workerId)) == 0) {
             return i;
@@ -88,8 +103,9 @@ ssize_t find_index_by_id(HeapData* heap, const char* workerId) {
     return -1;
 }
 
-bool remove_node_by_id(HeapData* heap, const char* workerId) {
-    ssize_t index = find_index_by_id(heap, workerId);
+// Remove a specific worker element from the heap
+bool worker_remove_node_by_id(struct WorkerHeapData* heap, const char* workerId) {
+    ssize_t index = worker_find_index_by_id(heap, workerId);
     if (index == -1) {
         fprintf(stderr, "Worker ID not found\n");
         return false;
@@ -99,11 +115,9 @@ bool remove_node_by_id(HeapData* heap, const char* workerId) {
     heap->size--;
 
     if (index < heap->size) {
-        heapify_down(heap, index);
-        heapify_up(heap, index);
+        worker_heapify_down(heap, index);
+        worker_heapify_up(heap, index);
     }
 
     return true;
 }
-
-// Remove the main function from here

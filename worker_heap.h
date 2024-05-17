@@ -1,36 +1,46 @@
 #ifndef WORKER_HEAP_H
 #define WORKER_HEAP_H
 
-#include <stddef.h>
-#include <stdint.h>
-#include <pthread.h>
-#include <sys/types.h>
+#include <vector>
+#include <unordered_map>
+#include <ctime>
+#include <iostream>
 
-#define MAX_WORKERS 10000
-
-// Structure to store each worker element in the heap
-struct WorkerHeapElement {
-    char workerId[32];
-    char timestamp[32];
-    int32_t priority;
-    int32_t capacity_difference;
+// Structure to represent a worker node
+struct WorkerNode {
+    int id;
+    int capacity;
+    time_t last_heartbeat;
+    WorkerNode(int id, int capacity) : id(id), capacity(capacity) {
+        last_heartbeat = std::time(nullptr);
+    }
 };
 
-// Structure to store the worker heap data
-struct WorkerHeapData {
-    struct WorkerHeapElement data[MAX_WORKERS];
-    size_t size;
-    pthread_mutex_t mutex; // Add the mutex here
+// Comparator for the priority queue
+struct WorkerNodeComparator {
+    bool operator()(const WorkerNode& a, const WorkerNode& b) {
+        return a.capacity < b.capacity;
+    }
 };
 
-// Function prototypes for worker heap
-struct WorkerHeapData* initialize_worker_heap(void* shm_addr);
-void worker_swap(struct WorkerHeapElement* a, struct WorkerHeapElement* b);
-void worker_heapify_up(struct WorkerHeapData* heap, size_t index);
-void worker_heapify_down(struct WorkerHeapData* heap, size_t index);
-void worker_heap_push(struct WorkerHeapData* heap, const char* workerId, const char* timestamp, int32_t priority, int32_t capacity_difference);
-struct WorkerHeapElement worker_heap_pop(struct WorkerHeapData* heap);
-ssize_t worker_find_index_by_id(struct WorkerHeapData* heap, const char* workerId);
-bool worker_remove_node_by_id(struct WorkerHeapData* heap, const char* workerId);
+class WorkerHeap {
+private:
+    std::vector<WorkerNode> heap;
+    std::unordered_map<int, int> node_index_map; // Map to store node id and their index in heap
+
+    void heapify_up(int index);
+    void heapify_down(int index);
+
+public:
+    WorkerHeap();
+    void add_worker(int id, int capacity);
+    void remove_worker(int id);
+    void update_worker_capacity(int id, int new_capacity);
+    void update_worker_heartbeat(int id);
+    WorkerNode get_top_worker();
+    bool is_empty();
+    std::vector<WorkerNode> get_all_workers();
+    std::vector<int> get_dead_workers(time_t current_time, time_t threshold);
+};
 
 #endif // WORKER_HEAP_H

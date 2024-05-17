@@ -7,13 +7,9 @@ This project demonstrates a distributed system for managing nodes (workers and c
 To compile the project, use the following command:
 
 ```bash
-# Compile both files
-g++ -c heap.cpp
-g++ -c heartbeat.cpp
-
-# Link the object files into a single executable
-g++ -o heartbeat heap.o heartbeat.o
+# Build
+./build.sh
 
 # Run the executable
-./heartbeat
+./run.sh
 ```

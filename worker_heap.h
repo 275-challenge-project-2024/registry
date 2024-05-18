@@ -6,7 +6,6 @@
 #include <ctime>
 #include <iostream>
 
-// Structure to represent a worker node
 struct WorkerNode {
     int id;
     int capacity;
@@ -16,7 +15,6 @@ struct WorkerNode {
     }
 };
 
-// Comparator for the priority queue
 struct WorkerNodeComparator {
     bool operator()(const WorkerNode& a, const WorkerNode& b) {
         return a.capacity < b.capacity;
@@ -26,7 +24,7 @@ struct WorkerNodeComparator {
 class WorkerHeap {
 private:
     std::vector<WorkerNode> heap;
-    std::unordered_map<int, int> node_index_map; // Map to store node id and their index in heap
+    std::unordered_map<int, int> node_index_map;
 
     void heapify_up(int index);
     void heapify_down(int index);
@@ -43,4 +41,4 @@ public:
     std::vector<int> get_dead_workers(time_t current_time, time_t threshold);
 };
 
-#endif // WORKER_HEAP_H
+#endif

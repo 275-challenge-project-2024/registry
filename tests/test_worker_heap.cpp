@@ -61,15 +61,18 @@ void test_update_worker_heartbeat() {
     
     worker_heap.update_worker_heartbeat(1);
     
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    
     std::time_t after_update = std::time(nullptr);
     std::cout << "After heartbeat update: " << after_update << std::endl;
     
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    
-    // Check if there are no dead workers with a threshold of 0 seconds
-    assert(worker_heap.get_dead_workers(after_update, 0).empty());
+    std::this_thread::sleep_for(std::chrono::seconds(4));
+
+    std::time_t current_time = std::time(nullptr);
+    assert(worker_heap.get_dead_workers(current_time, 5).empty());
     std::cout << "Worker heartbeat updated successfully.\n" << std::endl;
 }
+
 
 void test_get_dead_workers() {
     std::cout << "Test: Get Dead Workers" << std::endl;
@@ -85,7 +88,7 @@ void test_adding_duplicate_worker() {
     WorkerHeap worker_heap;
     worker_heap.add_worker(1, 100);
     try {
-        worker_heap.add_worker(1, 200); // Should handle duplicate worker addition
+        worker_heap.add_worker(1, 200);
     } catch (const std::exception& e) {
         std::cout << "Caught exception for duplicate worker: " << e.what() << std::endl;
     }
@@ -97,7 +100,7 @@ void test_removing_non_existent_worker() {
     WorkerHeap worker_heap;
     worker_heap.add_worker(1, 100);
     try {
-        worker_heap.remove_worker(2); // Should handle removing non-existent worker
+        worker_heap.remove_worker(2);
     } catch (const std::exception& e) {
         std::cout << "Caught exception for non-existent worker: " << e.what() << std::endl;
     }

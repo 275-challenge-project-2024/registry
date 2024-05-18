@@ -62,19 +62,16 @@ void test_shared_memory() {
     const char* shm_name = "/test_client_list_shm";
     size_t shm_size = sizeof(ClientList);
 
-    // Create shared memory
     ClientList* client_list = ClientList::createSharedMemory(shm_name, shm_size);
     Client client1 = {1, 100};
     client_list->addClient(client1);
 
-    // Access shared memory
     ClientList* client_list_shared = ClientList::accessSharedMemory(shm_name, shm_size);
     const auto& clients = client_list_shared->getClients();
     assert(clients.size() == 1);
     assert(clients[0].id == 1);
     assert(clients[0].capacity == 100);
 
-    // Destroy shared memory
     ClientList::destroySharedMemory(shm_name, shm_size);
     std::cout << "Shared memory operations completed successfully.\n" << std::endl;
 }

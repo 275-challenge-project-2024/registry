@@ -8,21 +8,18 @@
 
 #define MAX_TASKS 10000
 
-// Structure to store each task element in the heap
 struct TaskHeapElement {
     char taskId[32];
     char timestamp[32];
     int32_t priority;
 };
 
-// Structure to store the task heap data
 struct TaskHeapData {
     struct TaskHeapElement data[MAX_TASKS];
     size_t size;
-    pthread_mutex_t mutex; // Add the mutex here
+    pthread_mutex_t mutex;
 };
 
-// Function prototypes for task heap
 struct TaskHeapData* initialize_task_heap(void* shm_addr);
 void task_swap(struct TaskHeapElement* a, struct TaskHeapElement* b);
 void task_heapify_up(struct TaskHeapData* heap, size_t index);
@@ -32,4 +29,4 @@ struct TaskHeapElement task_heap_pop(struct TaskHeapData* heap);
 ssize_t task_find_index_by_id(struct TaskHeapData* heap, const char* taskId);
 bool task_remove_node_by_id(struct TaskHeapData* heap, const char* taskId);
 
-#endif // TASK_HEAP_H
+#endif

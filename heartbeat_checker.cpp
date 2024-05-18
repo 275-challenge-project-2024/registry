@@ -20,12 +20,11 @@ void heartbeat_checker(WorkerHeap& worker_heap, time_t heartbeat_interval, time_
 
 int main() {
     WorkerHeap worker_heap;
-    time_t heartbeat_interval = 10; // Check every 10 seconds
-    time_t threshold = 30; // Worker considered dead if no heartbeat for 30 seconds
+    time_t heartbeat_interval = 10;
+    time_t threshold = 30;
 
     std::thread checker(heartbeat_checker, std::ref(worker_heap), heartbeat_interval, threshold);
 
-    // Simulate adding and updating workers
     std::cout << "Adding worker 1 with capacity 100" << std::endl;
     worker_heap.add_worker(1, 100);
 
@@ -35,7 +34,6 @@ int main() {
 
     std::this_thread::sleep_for(std::chrono::seconds(20));
 
-    // Join the thread to allow the program to exit gracefully
     checker.join();
     return 0;
 }

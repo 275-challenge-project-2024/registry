@@ -1,10 +1,8 @@
 #include "worker_heap.h"
 #include <algorithm>
 
-// Constructor
 WorkerHeap::WorkerHeap() {}
 
-// Private helper functions for heapify operations
 void WorkerHeap::heapify_up(int index) {
     while (index > 0) {
         int parent_index = (index - 1) / 2;

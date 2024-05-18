@@ -1,6 +1,3 @@
-#!/bin/bash
-
-# Function to display the menu and run the selected tests
 run_tests() {
     while true; do
         echo ""
@@ -37,7 +34,9 @@ run_tests() {
                 echo "==========================="
                 ;;
             4)
+                echo ""
                 echo "Exiting."
+                echo ""
                 exit 0
                 ;;
             *)

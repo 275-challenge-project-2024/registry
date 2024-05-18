@@ -11,8 +11,8 @@
 #include <sys/stat.h>
 
 struct Client {
-    int id;          // Unique identifier for the client
-    int capacity;    // Current capacity of the client
+    int id;
+    int capacity;
 };
 
 class ClientList {
@@ -32,14 +32,12 @@ public:
         pthread_mutex_destroy(&mutex);
     }
 
-    // Method to add a new client
     void addClient(const Client& client) {
         pthread_mutex_lock(&mutex);
         clients.push_back(client);
         pthread_mutex_unlock(&mutex);
     }
 
-    // Method to remove a client by ID
     void removeClient(int id) {
         pthread_mutex_lock(&mutex);
         clients.erase(std::remove_if(clients.begin(), clients.end(),

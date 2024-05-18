@@ -15,16 +15,16 @@
 #include <iomanip>
 #include <vector>
 #include <mutex>
-#include <fcntl.h> // For shm_open
-#include <sys/mman.h> // For mmap and shm_unlink
+#include <fcntl.h>
+#include <sys/mman.h>
 
 using namespace std;
 
 #define MAX_WORKERS 256
-#define SHM_KEY 12345 // Use a unique integer key for shared memory
-#define MAX_TIMEOUT 300000LL // 300000 milliseconds or 300 seconds or 5 min
+#define SHM_KEY 12345
+#define MAX_TIMEOUT 300000LL
 
-std::mutex mutex_heap; // Declare a mutex for accessing shared memory
+std::mutex mutex_heap;
 
 struct HeapElement {
     char workerId[32];
@@ -85,10 +85,10 @@ void heap_push(HeapData* heap, const char* workerId, const char* timestamp, int3
     }
 
     strncpy(heap->data[heap->size].workerId, workerId, sizeof(heap->data[heap->size].workerId) - 1);
-    heap->data[heap->size].workerId[sizeof(heap->data[heap->size].workerId) - 1] = '\0'; // Ensure null termination
+    heap->data[heap->size].workerId[sizeof(heap->data[heap->size].workerId) - 1] = '\0';
 
     strncpy(heap->data[heap->size].timestamp, timestamp, sizeof(heap->data[heap->size].timestamp) - 1);
-    heap->data[heap->size].timestamp[sizeof(heap->data[heap->size].timestamp) - 1] = '\0'; // Ensure null termination
+    heap->data[heap->size].timestamp[sizeof(heap->data[heap->size].timestamp) - 1] = '\0';
 
     heap->data[heap->size].curr_capacity = curr_capacity;
     heap->data[heap->size].total_capacity = total_capacity;
@@ -100,7 +100,7 @@ void heap_push(HeapData* heap, const char* workerId, const char* timestamp, int3
 HeapElement heap_pop(HeapData* heap) {
     if (heap->size == 0) {
         fprintf(stderr, "Heap is empty\n");
-        return HeapElement(); // Default initialization
+        return HeapElement();
     }
 
     HeapElement root = heap->data[0];
@@ -140,7 +140,7 @@ bool remove_node_by_id(HeapData* heap, const char* workerId) {
 
 HeapData *attach_heap()
 {
-    mutex_heap.lock(); // Lock the mutex before accessing shared memory
+    mutex_heap.lock();
 
     int shm_id = shmget(SHM_KEY, sizeof(HeapData), IPC_CREAT | 0666);
     if (shm_id < 0)
@@ -156,7 +156,7 @@ HeapData *attach_heap()
         exit(1);
     }
 
-    mutex_heap.unlock(); // Unlock the mutex after accessing shared memory
+    mutex_heap.unlock();
     
     return (HeapData *)shm_addr;
 }
@@ -174,16 +174,13 @@ void print_heap(HeapData *heap)
 }
 
 std::string getCurrentTimeInISO8601() {
-    // Get the current time
+    
     auto now = std::chrono::system_clock::now();
     
-    // Convert to time_t
     std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
     
-    // Convert to tm struct in UTC
     std::tm* now_tm = std::gmtime(&now_time_t);
     
-    // Format as ISO 8601 string
     std::ostringstream oss;
     oss << std::put_time(now_tm, "%Y-%m-%dT%H:%M:%SZ");
     
@@ -199,17 +196,14 @@ std::time_t parseTime(const std::string& time_str) {
 
 long long get_milliseconds_difference(const char* timestamp) {
 
-    // Parse timestamps into std::time_t
     std::string str(timestamp);
-    // std::cout << "Worker Latest Ping Time: " << timestamp << std::endl;
+
     std::time_t t1 = parseTime(timestamp);
 
-    // Get the current time
     std::string curr_time = getCurrentTimeInISO8601();
-    // std::cout << "Current Time: " << curr_time << std::endl;
+
     std::time_t t2 = parseTime(curr_time);
 
-    // Calculate the difference in seconds
     std::chrono::seconds difference_seconds = std::chrono::seconds(t2 - t1);
 
     long long difference_milliseconds = difference_seconds.count() * 1000;
@@ -289,14 +283,11 @@ public:
 };
 
 int main() {
-    // Combined main loop for checking heartbeat and managing clients
     const char* shm_name = "/client_list_shm";
     size_t shm_size = sizeof(ClientList);
 
-    // Create or access shared memory for ClientList
     ClientList* clientList = ClientList::createSharedMemory(shm_name, shm_size);
 
-    // Adding initial clients for testing
     Client client1 = {1, 100};
     Client client2 = {2, 200};
     clientList->addClient(client1);
@@ -312,7 +303,6 @@ int main() {
             exit(1);
         }
 
-        // Example of accessing the list of clients
         const std::vector<Client>& clients = clientList->getClients();
         for (const auto& client : clients) {
             std::cout << "Client ID: " << client.id << ", Capacity: " << client.capacity << std::endl;
@@ -321,7 +311,6 @@ int main() {
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    // Clean up shared memory for ClientList
     ClientList::destroySharedMemory(shm_name, shm_size);
 
     return 0;
